@@ -9,6 +9,8 @@ import word2vec
 import nltk
 import codecs
 
+from collections import namedtuple
+from operator import attrgetter
 
     
 
@@ -21,6 +23,8 @@ class Sumarizae:
     epsilon = 0.1
     _stop_words = frozenset()
     model = word2vec.load('journalistic.bin')
+    summary=""
+
 
 
     def __init__(self, sentences, sentences_count):
@@ -28,13 +32,18 @@ class Sumarizae:
 
         matrix = self._create_matrix(sentences, self.threshold)
         scores = self.power_method(matrix, self.epsilon)
-        ratings = dict(zip(document.sentences, scores))
-
-        return self._get_best_sentences(sentences, sentences_count, ratings)
+        ratings = dict(zip(sentences, scores))
+        summaryArray = self._get_best_sentences(sentences, sentences_count, ratings)
+        self.summary=""  
+        for x in summaryArray:
+            self.summary = self.summary + " " + x
 
 
 
     def _get_best_sentences(self, sentences, count, rating, *args, **kwargs):
+        ItemsCount = len(sentences)
+        SentenceInfo = namedtuple("SentenceInfo", ("sentence", "order", "rating",))
+
         rate = rating
         if isinstance(rating, dict):
             assert not args and not kwargs
@@ -43,12 +52,14 @@ class Sumarizae:
         infos = (SentenceInfo(s, o, rate(s, *args, **kwargs))
             for o, s in enumerate(sentences))
 
+
         # sort sentences by rating in descending order
         infos = sorted(infos, key=attrgetter("rating"), reverse=True)
         # get `count` first best rated sentences
-        if not isinstance(count, ItemsCount):
-            count = ItemsCount(count)
-        infos = count(infos)
+        #if not isinstance(count, ItemsCount):
+        #    count = ItemsCount(count)
+        #infos = count(infos)
+        infos= infos[:count]
         # sort sentences by their order in document
         infos = sorted(infos, key=attrgetter("order"))
 
@@ -65,10 +76,17 @@ class Sumarizae:
         degrees = numpy.zeros((sentences_count, ))
 
 
-        for row in xrange(len(sentences)):
-            for col in xrange(len(sentences)):
+        for row in range(sentences_count):
+            for col in range(sentences_count):
                 if (row <= col):
-                    matrix[row, col] = self._compute_distance(sentences[row], sentences[col])
+
+                    dist = self._compute_distance(sentences[row], sentences[col])
+                    #print("\r{0}".format(i))
+                    #print ( str(row) + "-"+str(col)+" = "+str(dist))
+                    #print(chr(27) + "[2J")
+                    #print (numpy.matrix(matrix))
+                    matrix[row, col] = dist
+                    matrix[col, row] = dist
                 if matrix[row, col] > threshold:
                     matrix[row, col] = 1.0
                     degrees[row] += 1
@@ -98,8 +116,8 @@ class Sumarizae:
             next_p = numpy.dot(transposed_matrix, p_vector)
             lambda_val = numpy.linalg.norm(numpy.subtract(next_p, p_vector))
             p_vector = next_p
-        print (matrix.shape)
-        print (p_vector)
+        #print (matrix.shape)
+        #print (p_vector)
         return p_vector
 
 
@@ -111,7 +129,7 @@ class Sumarizae:
             featureVec = numpy.zeros((num_features,), dtype="float32")
             nwords = 0
             for word in words:
-                if word  in self.model.vocab:
+                if word in self.model.vocab:
                     nwords = nwords+1
                     featureVec = numpy.add(featureVec, self.model[word][:num_features])
 
@@ -125,16 +143,16 @@ class Sumarizae:
 
     def _compute_distance(self,s1, s2):
 
-        sentence_1_avg_vector = self._avg_feature_vector(s1, 100)
-        sentence_2_avg_vector = self._avg_feature_vector(s2, 100)
-
-        #strSent1=" ".join(s1)
-        #strSent2=" ".join(s2)
-        #print ("sent1="+strSent1)
-        #print ("sent2="+strSent2)
-        
+        sentence_1_avg_vector = self._avg_feature_vector(s1.split(" "), 100)
+        sentence_2_avg_vector = self._avg_feature_vector(s2.split(" "), 100)
         distancia = 1 - scipy.spatial.distance.cosine(sentence_1_avg_vector,sentence_2_avg_vector)
+
+
+        #print ("sent1="+s1)
+        #print ("sent2="+s2)        
         #print ("distancia="+str(distancia))
+
+
         return  distancia 
 
 
@@ -150,8 +168,5 @@ sentences = nltk.sent_tokenizer.tokenize(text)
 
 
 
-sumarizae = Sumarizae(sentences,SENTENCES_COUNT)
-
-
-for sentence in sumarizae:
-    print(sentence)
+summary = Sumarizae(sentences,SENTENCES_COUNT).summary
+print summary
